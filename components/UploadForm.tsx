@@ -160,11 +160,28 @@ const UploadForm = () => {
     },
   });
 
-  const onSubmit = async () => {
+  const submitUpload = async (values: UploadSchemaValues) => {
+    const formData = new FormData();
+
+    formData.append('pdfFile', values.pdfFile);
+
+    if (values.coverImage) {
+      formData.append('coverImage', values.coverImage);
+    }
+
+    formData.append('title', values.title);
+    formData.append('author', values.author);
+    formData.append('voice', values.voice);
+
+    // Preserve the current placeholder behavior until the real upload endpoint is wired in.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  };
+
+  const onSubmit = async (values: UploadSchemaValues) => {
     setIsSubmitting(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await submitUpload(values);
     } finally {
       setIsSubmitting(false);
     }
