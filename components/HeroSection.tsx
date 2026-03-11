@@ -23,7 +23,7 @@ const steps = [
 
 const HeroSection = () => {
   return (
-    <section className="wrapper pt-28 mb-10 md:mb-16">
+    <section className="wrapper mb-10 md:mb-16">
         <div className="library-hero-card">
       <div className="library-hero-content">
         <div className="library-hero-text">
@@ -42,15 +42,24 @@ const HeroSection = () => {
           </Link>
         </div>
 
+        <div className="library-hero-illustration-desktop">
+          <Image
+            src="/assets/hero-illustration.png"
+            alt="Vintage books and a globe"
+            width={400}
+            height={400}
+            className="object-contain"
+          />
+        </div>
+
         <div className="library-hero-illustration">
-          <div className="library-hero-illustration-shell" aria-hidden="true">
             <Image
               src={heroIllustration}
-              alt=""
-              className="library-hero-illustration-svg"
-              priority
+              alt="Vintage books and a globe"
+              width={300}
+              height={300}
+              className="object-contain"
             />
-          </div>
         </div>
 
         <div className="library-steps-card">
