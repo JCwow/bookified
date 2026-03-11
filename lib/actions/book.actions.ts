@@ -4,6 +4,8 @@ import { CreateBook, TextSegment } from "@/types";
 import { generateSlug, serializeData } from "@/lib/utils";
 import Book from "@/database/models/book.model"
 import BookSegment from "@/database/models/book-segment.model";
+import { del } from "@vercel/blob";
+import { auth } from "@clerk/nextjs/server";
 
 export const getAllBooks = async () => {
     try{
@@ -47,6 +49,14 @@ export const checkBookExists = async(title: string) => {
 
 export const createBook = async(data: CreateBook) => {
     try{
+        const { userId } = await auth();
+        if (!userId) {
+            return {
+                success: false,
+                error: "Unauthorized"
+            };
+        }
+
         await connectToDatabase();
         const slug = generateSlug(data.title);
         const existingBook = await Book.findOne({slug}).lean();
@@ -58,7 +68,13 @@ export const createBook = async(data: CreateBook) => {
             }
         }
         // Todo: Cheeck subscription limits before creating a book
-        const book = await Book.create({...data, slug, totalSegments: 0});
+        const { clerkId: _ignoredClerkId, ...bookData } = data;
+        const book = await Book.create({
+            ...bookData,
+            clerkId: userId,
+            slug,
+            totalSegments: 0
+        });
         return {
             success: true,
             data: serializeData(book)
@@ -72,12 +88,32 @@ export const createBook = async(data: CreateBook) => {
     }
 }
 
-export const saveBookSegments = async(bookId: string, clerkId: string, segments: TextSegment[]) => {
+export const saveBookSegments = async(bookId: string, _clerkId: string, segments: TextSegment[]) => {
+    let userId: string | null = null;
+
     try{
+        const authResult = await auth();
+        userId = authResult.userId;
+        if (!userId) {
+            return {
+                success: false,
+                error: "Unauthorized"
+            };
+        }
+
         await connectToDatabase();
         console.log('Saving book segments ...');
+
+        const ownedBook = await Book.findOne({ _id: bookId, clerkId: userId }).lean();
+        if (!ownedBook) {
+            return {
+                success: false,
+                error: "Book not found or unauthorized"
+            };
+        }
+
         const segmentsToInsert = segments.map(({text, segmentIndex, pageNumber, wordCount}) => ({
-            clerkId,
+            clerkId: userId,
             bookId,
             content: text,
             segmentIndex,
@@ -85,7 +121,13 @@ export const saveBookSegments = async(bookId: string, clerkId: string, segments:
             wordCount
         }))
         await BookSegment.insertMany(segmentsToInsert);
-        await Book.findByIdAndUpdate(bookId, {totalSegments: segments.length});
+
+        const bookToUpdate = await Book.findOne({ _id: bookId, clerkId: userId }).lean();
+        if (!bookToUpdate) {
+            throw new Error("Book not found or unauthorized while updating");
+        }
+
+        await Book.updateOne({ _id: bookId, clerkId: userId }, { totalSegments: segments.length });
         console.log('Book segments saved successfully.');
         return {
             success: true,
@@ -93,12 +135,35 @@ export const saveBookSegments = async(bookId: string, clerkId: string, segments:
         }
     }catch(e){
        console.error('Error saving book segments', e);
-       await BookSegment.deleteMany({bookId});
-       await Book.findByIdAndDelete(bookId);
-       console.log('Deleted book segments and book due to failure to save segments.');
+
+       if (userId) {
+           const ownedBook = await Book.findOne({ _id: bookId, clerkId: userId }).lean();
+           if (ownedBook?.clerkId === userId) {
+               await BookSegment.deleteMany({ bookId, clerkId: userId });
+               console.log('Deleted book segments due to failure to save segments.');
+           }
+       }
+
        return {
            success: false,
            error: e
        }
+    }
+}
+
+export const deleteUploadedBlob = async (pathname?: string | null) => {
+    if (!pathname) {
+        return { success: true };
+    }
+
+    try {
+        await del(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        return { success: true };
+    } catch (e) {
+        console.error('Error deleting uploaded blob', e);
+        return {
+            success: false,
+            error: e
+        };
     }
 }

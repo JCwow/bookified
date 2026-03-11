@@ -28,7 +28,7 @@ import {
   type UploadSchemaValues,
 } from '@/lib/zod';
 import { toast } from 'sonner';
-import { checkBookExists, createBook, saveBookSegments } from '@/lib/actions/book.actions';
+import { checkBookExists, createBook, deleteUploadedBlob, saveBookSegments } from '@/lib/actions/book.actions';
 import { useRouter } from 'next/navigation';
 import { BookUploadFormValues } from '@/types';
 import {upload} from '@vercel/blob/client';
@@ -191,6 +191,24 @@ const UploadForm = () => {
     }
     setIsSubmitting(true);
     // PostHog -> Track Book Uploads ...
+    let uploadedPdfBlob: Awaited<ReturnType<typeof upload>> | null = null;
+    let uploadedCoverBlob: Awaited<ReturnType<typeof upload>> | null = null;
+    const cleanupUploadedBlobs = async () => {
+      const blobKeys = [uploadedPdfBlob?.pathname, uploadedCoverBlob?.pathname].filter(
+        (key): key is string => Boolean(key),
+      );
+
+      await Promise.all(
+        blobKeys.map(async (fileBlobKey) => {
+          try {
+            await deleteUploadedBlob(fileBlobKey);
+          } catch (cleanupError) {
+            console.error(`Failed to cleanup blob ${fileBlobKey}`, cleanupError);
+          }
+        }),
+      );
+    };
+
     try {
         const existsCheck = await checkBookExists(values.title);
         if(existsCheck.exists && existsCheck.book){
@@ -206,7 +224,7 @@ const UploadForm = () => {
             toast.error("Failed to parse PDF. Please try again with a different file.");
             return;
         }
-        const uploadedPdfBlob = await upload(fileTitle, pdfFile, {
+        uploadedPdfBlob = await upload(fileTitle, pdfFile, {
             access: 'public',
             handleUploadUrl: '/api/upload',
             contentType: 'application/pdf'
@@ -214,7 +232,7 @@ const UploadForm = () => {
         let coverUrl: string;
         if(values.coverImage){
             const coverFile = values.coverImage;
-            const uploadedCoverBlob = await upload(`${fileTitle}_cover.png`, coverFile, {
+            uploadedCoverBlob = await upload(`${fileTitle}_cover.png`, coverFile, {
                 access: 'public',
                 handleUploadUrl: '/api/upload',
                 contentType: coverFile.type
@@ -223,7 +241,7 @@ const UploadForm = () => {
         }else{
             const response = await fetch(parsedPDF.cover);
             const blob = await response.blob();
-            const uploadedCoverBlob = await upload(`${fileTitle}_cover.png`, blob, {
+            uploadedCoverBlob = await upload(`${fileTitle}_cover.png`, blob, {
                 access: 'public',
                 handleUploadUrl: '/api/upload',
                 contentType: 'image/png'
@@ -240,17 +258,26 @@ const UploadForm = () => {
             coverURL: coverUrl,
             fileSize: pdfFile.size
         });
-        if(!book.success || !book.data) throw new Error("Failed to create book");
+        if(!book.success || !book.data) {
+            await cleanupUploadedBlobs();
+            throw new Error("Failed to create book");
+        }
         if(book.alreadyExists) {
+            await cleanupUploadedBlobs();
             toast.info("Book already exists");
             form.reset()
             router.push(`/books/${book.data.slug}`)
             return;
         }
-        const segments = await saveBookSegments(book.data._id, userId, parsedPDF.content);
-        if(!segments?.success){
+        try {
+            const segments = await saveBookSegments(book.data._id, userId, parsedPDF.content);
+            if(!segments?.success){
+                throw new Error("Failed to save book segments");
+            }
+        } catch (segmentError) {
+            await cleanupUploadedBlobs();
             toast.error("Failed to save book segments");
-            throw new Error("Failed to save book segments");
+            throw segmentError;
         }
         form.reset();
         router.push('/');
