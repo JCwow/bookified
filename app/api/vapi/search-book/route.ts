@@ -9,6 +9,9 @@ type ParsedToolCall = {
     segmentNumber: number;
 };
 
+const SERVICE_TOKEN_ENV_KEYS = ["VAPI_WEBHOOK_SERVICE_TOKEN", "VAPI_WEBHOOK_API_KEY"] as const;
+const USER_ID_KEYS = new Set(["userId", "user_id", "clerkId", "clerk_id"]);
+
 const normalizeToolName = (name: string) =>
     name
         .toLowerCase()
@@ -121,13 +124,95 @@ const parseToolCalls = (body: Record<string, unknown>): ParsedToolCall[] => {
     return parsedCalls;
 };
 
+const getConfiguredServiceToken = () => {
+    for (const key of SERVICE_TOKEN_ENV_KEYS) {
+        const value = process.env[key];
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return null;
+};
+
+const extractServiceToken = (request: Request) => {
+    const apiKey = request.headers.get("x-api-key");
+    if (typeof apiKey === "string" && apiKey.trim()) {
+        return apiKey.trim();
+    }
+
+    const authorization = request.headers.get("authorization");
+    if (!authorization) {
+        return null;
+    }
+
+    const [scheme, token] = authorization.trim().split(/\s+/, 2);
+    if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
+        return null;
+    }
+
+    return token.trim();
+};
+
+const isServiceTokenValid = (token: string | null) => {
+    const configuredServiceToken = getConfiguredServiceToken();
+    if (!configuredServiceToken || !token) {
+        return false;
+    }
+    return token === configuredServiceToken;
+};
+
+const extractUserIdFromPayload = (value: unknown, depth = 0): string | null => {
+    if (depth > 4 || typeof value !== "object" || value === null) {
+        return null;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const userId = extractUserIdFromPayload(item, depth + 1);
+            if (userId) {
+                return userId;
+            }
+        }
+        return null;
+    }
+
+    for (const [key, fieldValue] of Object.entries(value)) {
+        if (USER_ID_KEYS.has(key) && typeof fieldValue === "string" && fieldValue.trim()) {
+            return fieldValue.trim();
+        }
+    }
+
+    for (const fieldValue of Object.values(value)) {
+        const userId = extractUserIdFromPayload(fieldValue, depth + 1);
+        if (userId) {
+            return userId;
+        }
+    }
+
+    return null;
+};
+
 export async function POST(request: Request): Promise<NextResponse> {
     try {
         const body = (await request.json()) as Record<string, unknown>;
         const parsedCalls = parseToolCalls(body);
+        const payloadUserId = extractUserIdFromPayload(body);
+        const incomingServiceToken = extractServiceToken(request);
+        const configuredServiceToken = getConfiguredServiceToken();
+        const validatedServiceToken = isServiceTokenValid(incomingServiceToken)
+            ? incomingServiceToken
+            : null;
 
         if (parsedCalls.length === 0) {
             return NextResponse.json({ result: NO_INFO_RESULT });
+        }
+
+        if (configuredServiceToken && !validatedServiceToken) {
+            return NextResponse.json({ result: NO_INFO_RESULT }, { status: 401 });
+        }
+
+        if (!payloadUserId && !validatedServiceToken) {
+            return NextResponse.json({ result: NO_INFO_RESULT }, { status: 401 });
         }
 
         const formattedMatches: string[] = [];
@@ -136,6 +221,10 @@ export async function POST(request: Request): Promise<NextResponse> {
                 parsedCall.bookId,
                 parsedCall.query,
                 parsedCall.segmentNumber,
+                {
+                    userId: payloadUserId,
+                    serviceToken: validatedServiceToken,
+                },
             );
 
             if (!searchResult.success || !Array.isArray(searchResult.data) || searchResult.data.length === 0) {

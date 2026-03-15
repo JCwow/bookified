@@ -210,13 +210,61 @@ type SearchBookSegmentResult = {
     score?: number;
 };
 
+type SearchBookAuthContext = {
+    userId?: string | null;
+    serviceToken?: string | null;
+};
+
+const SERVICE_TOKEN_ENV_KEYS = ["VAPI_WEBHOOK_SERVICE_TOKEN", "VAPI_WEBHOOK_API_KEY"] as const;
+
+const getConfiguredServiceToken = () => {
+    for (const key of SERVICE_TOKEN_ENV_KEYS) {
+        const value = process.env[key];
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return null;
+};
+
+const isServiceTokenValid = (token?: string | null) => {
+    const configuredToken = getConfiguredServiceToken();
+    if (!configuredToken || !token) {
+        return false;
+    }
+    return token === configuredToken;
+};
+
 export const searchBookSegments = async (
     bookId: string,
     query: string,
     segmentNumber = 3,
+    authContext?: SearchBookAuthContext,
 ) => {
     try {
-        const { userId } = await auth();
+        const explicitUserId = authContext?.userId?.trim() || null;
+        const hasValidServiceToken = isServiceTokenValid(authContext?.serviceToken);
+
+        let userId = explicitUserId;
+        if (!userId && !hasValidServiceToken) {
+            const authResult = await auth();
+            userId = authResult.userId;
+        }
+
+        if (!userId && hasValidServiceToken) {
+            await connectToDatabase();
+            const bookOwner = await Book.findById(bookId).select("clerkId").lean();
+            if (!bookOwner || typeof bookOwner.clerkId !== "string" || !bookOwner.clerkId.trim()) {
+                return {
+                    success: false,
+                    error: "Book not found or unauthorized",
+                    data: [] as SearchBookSegmentResult[],
+                };
+            }
+
+            userId = bookOwner.clerkId.trim();
+        }
+
         if (!userId) {
             return {
                 success: false,
