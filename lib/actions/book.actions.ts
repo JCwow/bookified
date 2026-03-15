@@ -6,6 +6,9 @@ import Book from "@/database/models/book.model"
 import BookSegment from "@/database/models/book-segment.model";
 import { del } from "@vercel/blob";
 import { auth } from "@clerk/nextjs/server";
+import { revalidatePath } from "next/cache";
+
+revalidatePath('/');
 
 export const getAllBooks = async () => {
     try{
@@ -110,6 +113,9 @@ export const createBook = async(data: CreateBook) => {
             slug,
             totalSegments: 0
         });
+
+        revalidatePath('/');
+
         return {
             success: true,
             data: serializeData(book)
