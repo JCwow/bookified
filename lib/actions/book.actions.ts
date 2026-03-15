@@ -202,3 +202,85 @@ export const deleteUploadedBlob = async (pathname?: string | null) => {
         };
     }
 }
+
+type SearchBookSegmentResult = {
+    segmentIndex: number;
+    pageNumber?: number;
+    content: string;
+    score?: number;
+};
+
+export const searchBookSegments = async (
+    bookId: string,
+    query: string,
+    segmentNumber = 3,
+) => {
+    try {
+        const { userId } = await auth();
+        if (!userId) {
+            return {
+                success: false,
+                error: "Unauthorized",
+                data: [] as SearchBookSegmentResult[],
+            };
+        }
+
+        await connectToDatabase();
+
+        const book = await Book.findOne({ _id: bookId, clerkId: userId }).lean();
+        if (!book) {
+            return {
+                success: false,
+                error: "Book not found or unauthorized",
+                data: [] as SearchBookSegmentResult[],
+            };
+        }
+
+        const limit = Number.isFinite(segmentNumber) ? Math.max(1, Math.min(10, segmentNumber)) : 3;
+
+        const textMatches = await BookSegment.find(
+            { bookId, clerkId: userId, $text: { $search: query } },
+            {
+                score: { $meta: "textScore" },
+                content: 1,
+                segmentIndex: 1,
+                pageNumber: 1,
+            },
+        )
+            .sort({ score: { $meta: "textScore" } })
+            .limit(limit)
+            .lean();
+
+        if (textMatches.length > 0) {
+            return {
+                success: true,
+                data: serializeData(textMatches),
+            };
+        }
+
+        const fallbackRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        const fallbackMatches = await BookSegment.find(
+            { bookId, clerkId: userId, content: { $regex: fallbackRegex } },
+            {
+                content: 1,
+                segmentIndex: 1,
+                pageNumber: 1,
+            },
+        )
+            .sort({ segmentIndex: 1 })
+            .limit(limit)
+            .lean();
+
+        return {
+            success: true,
+            data: serializeData(fallbackMatches),
+        };
+    } catch (e) {
+        console.error("Error searching book segments", e);
+        return {
+            success: false,
+            error: e,
+            data: [] as SearchBookSegmentResult[],
+        };
+    }
+};
