@@ -196,6 +196,18 @@
   .clerk-subscriptions {
     @apply py-18 min-h-screen max-w-7xl px-5 mx-auto w-full flex flex-col pb-12 items-center container;
   }
+  .subscriptions-limit-grid {
+    @apply mb-8 grid w-full grid-cols-1 gap-4 md:grid-cols-3;
+  }
+  .subscriptions-limit-card {
+    @apply rounded-2xl border border-[var(--border-subtle)] bg-white px-5 py-4 text-left shadow-[var(--shadow-soft-sm)];
+  }
+  .subscriptions-limit-card h2 {
+    @apply mb-2 text-xl font-semibold text-[var(--text-primary)];
+  }
+  .subscriptions-limit-card p {
+    @apply text-sm text-[var(--text-secondary)];
+  }
   .page-title {
     @apply !text-3xl font-bold text-center;
   }
