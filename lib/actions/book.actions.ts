@@ -8,7 +8,6 @@ import { del } from "@vercel/blob";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
-revalidatePath('/');
 import { getPlanLimitsFromHas } from "@/lib/subscription/utils";
 
 export const getAllBooks = async () => {

@@ -80,6 +80,22 @@ export function useVapi(book: IBook) {
         [],
     );
 
+    const mergeConversationMessages = useCallback((previous: Messages[], incoming: Messages[]): Messages[] => {
+        if (incoming.length === 0) return previous;
+        if (previous.length === 0) return incoming;
+
+        const merged = [...previous];
+        for (const message of incoming) {
+            const alreadyExists = merged.some(
+                (item) => item.role === message.role && item.content === message.content,
+            );
+            if (!alreadyExists) {
+                merged.push(message);
+            }
+        }
+        return merged;
+    }, []);
+
     // Set up Vapi event listeners
     useEffect(() => {
         const handlers = {
@@ -155,9 +171,7 @@ export function useVapi(book: IBook) {
             }) => {
                 if (message.type === 'conversation-update' && Array.isArray(message.messages)) {
                     const conversationMessages = normalizeConversationMessages(message.messages);
-                    if (conversationMessages.length > 0) {
-                        setMessages(conversationMessages);
-                    }
+                    setMessages((prev) => mergeConversationMessages(prev, conversationMessages));
                     return;
                 }
 
@@ -269,7 +283,7 @@ export function useVapi(book: IBook) {
             });
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [normalizeConversationMessages]);
+    }, [mergeConversationMessages, normalizeConversationMessages]);
 
     const start = useCallback(async () => {
         if (!userId) {

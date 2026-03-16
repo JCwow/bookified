@@ -22,11 +22,22 @@ const Transcript = ({
   currentUserMessage,
 }: TranscriptProps) => {
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   useEffect(() => {
     if (!messagesRef.current) return;
-    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    if (shouldAutoScrollRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }
   }, [messages, currentMessages, currentMessage, currentUserMessage]);
+
+  const handleScroll = () => {
+    if (!messagesRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = messagesRef.current;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    shouldAutoScrollRef.current = distanceFromBottom < 60;
+  };
 
   const fallbackCurrentMessages: TranscriptMessage[] = [];
   if (currentUserMessage.trim()) {
@@ -57,7 +68,7 @@ const Transcript = ({
 
   return (
     <div className="transcript-container">
-      <div ref={messagesRef} className="transcript-messages">
+      <div ref={messagesRef} className="transcript-messages" onScroll={handleScroll}>
         {messages.map((message, index) => {
           const isUser = message.role === 'user';
 
@@ -86,7 +97,7 @@ const Transcript = ({
 
           return (
             <div
-              key={`live-${message.role}-${index}-${message.content}`}
+              key={`live-${message.role}-${index}`}
               className={`transcript-message ${
                 isUser ? 'transcript-message-user' : 'transcript-message-assistant'
               }`}
