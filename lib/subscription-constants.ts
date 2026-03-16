@@ -3,6 +3,11 @@ export const PLAN_SLUGS = {
   pro: 'pro',
 } as const;
 
+export const PLAN_SLUG_ALIASES: Record<keyof typeof PLAN_SLUGS, string[]> = {
+  standard: ['standard', 'standard-plan', 'standard_plan'],
+  pro: ['pro', 'pro-plan', 'pro_plan'],
+};
+
 export type PlanType = 'free' | keyof typeof PLAN_SLUGS;
 
 export type PlanLimits = {

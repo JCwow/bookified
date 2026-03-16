@@ -4,8 +4,20 @@ import useVapi from '@/hooks/useVapi';
 import { IBook } from '@/types';
 import Image from 'next/image';
 import Transcript from './Transcript';
+import { useCurrentUserPlan } from '@/lib/subscription/client';
 
-const VapiControls = ({ book }: { book: IBook }) => {
+const VapiControls = ({
+  book,
+  initialMaxDurationMinutes,
+}: {
+  book: IBook;
+  initialMaxDurationMinutes: number;
+}) => {
+  const { isLoaded, limits } = useCurrentUserPlan();
+  const effectiveMaxDurationMinutes = isLoaded
+    ? limits.maxSessionMinutes
+    : initialMaxDurationMinutes;
+
   const {
     messages,
     currentMessages,
@@ -18,8 +30,20 @@ const VapiControls = ({ book }: { book: IBook }) => {
     limitError,
     start,
     stop,
-  } = useVapi(book);
+  } = useVapi(book, effectiveMaxDurationMinutes);
   const isAiResponding = isActive && (status === 'speaking' || status === 'thinking');
+  const statusMap: Record<
+    typeof status,
+    { label: string; dotClass: string }
+  > = {
+    idle: { label: 'Ready', dotClass: 'vapi-status-dot-ready' },
+    connecting: { label: 'Connecting', dotClass: 'vapi-status-dot-connecting' },
+    starting: { label: 'Thinking', dotClass: 'vapi-status-dot-thinking' },
+    listening: { label: 'Listening', dotClass: 'vapi-status-dot-listening' },
+    thinking: { label: 'Thinking', dotClass: 'vapi-status-dot-thinking' },
+    speaking: { label: 'Speaking', dotClass: 'vapi-status-dot-speaking' },
+  };
+  const currentStatus = statusMap[status];
   const formatDuration = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -67,8 +91,8 @@ const VapiControls = ({ book }: { book: IBook }) => {
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="vapi-status-indicator">
-              <span className="vapi-status-dot vapi-status-dot-ready" />
-              <span className="vapi-status-text">Ready</span>
+              <span className={`vapi-status-dot ${currentStatus.dotClass}`} />
+              <span className="vapi-status-text">{currentStatus.label}</span>
             </div>
 
             <div className="vapi-status-indicator">

@@ -1,14 +1,17 @@
-import { PLAN_SLUGS, PlanType, SUBSCRIPTION_PLANS } from '@/lib/subscription-constants';
+import { PLAN_SLUG_ALIASES, PlanType, SUBSCRIPTION_PLANS } from '@/lib/subscription-constants';
 
 type PlanCheck = { plan: string };
 export type ClerkHasFn = (params: PlanCheck) => boolean;
 
+const hasAnyPlan = (has: ClerkHasFn | null | undefined, planSlugs: string[]): boolean =>
+  planSlugs.some((slug) => has?.({ plan: slug }));
+
 export const getPlanFromHas = (has?: ClerkHasFn | null): PlanType => {
-  if (has?.({ plan: PLAN_SLUGS.pro })) {
+  if (hasAnyPlan(has, PLAN_SLUG_ALIASES.pro)) {
     return 'pro';
   }
 
-  if (has?.({ plan: PLAN_SLUGS.standard })) {
+  if (hasAnyPlan(has, PLAN_SLUG_ALIASES.standard)) {
     return 'standard';
   }
 
