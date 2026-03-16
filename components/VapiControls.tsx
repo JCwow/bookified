@@ -13,10 +13,18 @@ const VapiControls = ({ book }: { book: IBook }) => {
     currentUserMessage,
     isActive,
     status,
+    duration,
+    maxDurationSeconds,
+    limitError,
     start,
     stop,
   } = useVapi(book);
   const isAiResponding = isActive && (status === 'speaking' || status === 'thinking');
+  const formatDuration = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -68,13 +76,20 @@ const VapiControls = ({ book }: { book: IBook }) => {
             </div>
 
             <div className="vapi-status-indicator">
-              <span className="vapi-status-text">0:00/15:00</span>
+              <span className="vapi-status-text">
+                {formatDuration(duration)}/{formatDuration(maxDurationSeconds)}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       <div className="vapi-transcript-wrapper">
+        {limitError ? (
+          <p className="mb-4 rounded-xl border border-[#c8553d]/30 bg-[#fff4ec] px-4 py-3 text-sm text-[#7a3d1f]">
+            {limitError}
+          </p>
+        ) : null}
         <Transcript
           messages={messages}
           currentMessages={currentMessages}

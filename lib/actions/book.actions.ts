@@ -9,6 +9,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
 revalidatePath('/');
+import { getPlanLimitsFromHas } from "@/lib/subscription/utils";
 
 export const getAllBooks = async () => {
     try{
@@ -87,7 +88,9 @@ export const checkBookExists = async(title: string) => {
 
 export const createBook = async(data: CreateBook) => {
     try{
-        const { userId } = await auth();
+        const authState = await auth();
+        const userId = authState.userId;
+        const has = (authState as { has?: Parameters<typeof getPlanLimitsFromHas>[0] }).has;
         if (!userId) {
             return {
                 success: false,
@@ -105,10 +108,19 @@ export const createBook = async(data: CreateBook) => {
                 alreadyExists: true
             }
         }
-        // Todo: Cheeck subscription limits before creating a book
-        const { clerkId: _ignoredClerkId, ...bookData } = data;
+        const { plan, limits } = getPlanLimitsFromHas(has);
+        const currentBookCount = await Book.countDocuments({ clerkId: userId });
+
+        if (currentBookCount >= limits.maxBooks) {
+            return {
+                success: false,
+                error: `Book limit reached for ${plan} plan (${limits.maxBooks} max). Upgrade your subscription to add more books.`,
+                isBillingError: true,
+            };
+        }
+
         const book = await Book.create({
-            ...bookData,
+            ...data,
             clerkId: userId,
             slug,
             totalSegments: 0

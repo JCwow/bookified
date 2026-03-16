@@ -258,7 +258,12 @@ const UploadForm = () => {
             coverURL: coverUrl,
             fileSize: pdfFile.size
         });
-        if(!book.success || !book.data) {
+        if (!book.success) {
+            await cleanupUploadedBlobs();
+            toast.error(typeof book.error === 'string' ? book.error : 'Failed to create book.');
+            return;
+        }
+        if (!book.data) {
             await cleanupUploadedBlobs();
             throw new Error("Failed to create book");
         }
